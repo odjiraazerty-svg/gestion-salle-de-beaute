@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: saas-beaute-api
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        sync: false

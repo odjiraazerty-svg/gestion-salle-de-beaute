@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Gestion Beaute</string>
+    <string name="title_activity_main">Gestion Beaute</string>
+    <string name="package_name">com.saas.gestionbeaute</string>
+    <string name="custom_url_scheme">com.saas.gestionbeaute</string>
+</resources>
