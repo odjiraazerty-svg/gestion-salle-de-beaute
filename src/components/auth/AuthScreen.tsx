@@ -178,7 +178,7 @@ export const AuthScreen: React.FC = () => {
             <Sparkles className="w-7 h-7 fill-current" />
           </div>
           <h1 className="text-2xl font-serif tracking-tight font-bold theme-text-primary uppercase">
-            {currentSalon.name}
+            {currentSalon?.name || 'Élysée Beauté'}
           </h1>
           <p className="text-xs uppercase tracking-widest theme-text-accent font-semibold mt-0.5">
             Plateforme SaaS de Gestion & Réservation Beauté
@@ -635,7 +635,7 @@ export const AuthScreen: React.FC = () => {
 
         {/* Footer */}
         <p className="text-center text-xs theme-text-muted mt-5">
-          © {new Date().getFullYear()} {currentSalon.name} • Plateforme Multi-Espaces SaaS
+          © {new Date().getFullYear()} {currentSalon?.name || 'Élysée Beauté'} • Plateforme Multi-Espaces SaaS
         </p>
       </div>
 

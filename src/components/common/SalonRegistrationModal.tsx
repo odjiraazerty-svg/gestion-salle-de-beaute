@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useSalon } from '../../context/SalonContext';
 import { ServiceItem, ServiceUnivers } from '../../types';
 import { api } from '../../services/api';
@@ -37,6 +37,41 @@ interface SalonRegistrationModalProps {
   onClose: () => void;
   onSuccess?: (newSalonId: string) => void;
 }
+
+// Helper to verify if a service matches a salon's universe
+const isServiceCompatibleWithSalon = (
+  srv: { univers?: string; universe?: string },
+  salonUniverse: string
+): boolean => {
+  if (!salonUniverse || salonUniverse === 'mixte' || salonUniverse === 'all') return true;
+  
+  const sUniv = (srv.univers || '').trim().toLowerCase();
+  const sUniverse = (srv.universe || '').trim().toLowerCase();
+
+  // Les prestations universelles/mixtes s'adaptent à tous les salons
+  if (sUniv === 'mixte' || sUniverse === 'mixte') return true;
+
+  const target = salonUniverse.trim().toLowerCase();
+  if (target === 'femme' || target === 'dame') {
+    return sUniv === 'dame' || sUniv === 'femme' || sUniverse === 'femme' || sUniverse === 'dame';
+  }
+  if (target === 'homme') {
+    return sUniv === 'homme' || sUniverse === 'homme';
+  }
+  if (target === 'enfant') {
+    return sUniv === 'enfant' || sUniv === 'adolescent' || sUniverse === 'enfant' || sUniverse === 'adolescent';
+  }
+  return sUniv === target || sUniverse === target;
+};
+
+const getUniverseLabel = (uType: string): string => {
+  switch (uType) {
+    case 'femme': return 'Dame (Beauté & Soins)';
+    case 'homme': return 'Homme (Barber & Coiffure)';
+    case 'enfant': return 'Enfant & Adolescent';
+    case 'mixte': default: return 'Mixte (Dame & Homme)';
+  }
+};
 
 // Preset luxury covers
 const PRESET_COVERS = [
@@ -126,7 +161,12 @@ export const SalonRegistrationModal: React.FC<SalonRegistrationModalProps> = ({
 
   const [formData, setFormData] = useState(initialFormData);
 
-  // Initialize and Reset form whenever modal is opened
+  // Prestations compatibles avec l'univers choisi à l'étape 1
+  const compatibleCatalogServices = useMemo(() => {
+    return availableCatalogServices.filter(srv => isServiceCompatibleWithSalon(srv, formData.universeType));
+  }, [availableCatalogServices, formData.universeType]);
+
+  // Initialisation et réinitialisation du formulaire à l'ouverture du modal
   useEffect(() => {
     if (isOpen) {
       setStep(1);
@@ -139,24 +179,13 @@ export const SalonRegistrationModal: React.FC<SalonRegistrationModalProps> = ({
       setServiceUniverseFilter('all');
       setServiceSearchQuery('');
       setIsCreatingCustomService(false);
+      setSelectedServicesMap({});
 
-      // Load all global predefined services from platform database
+      // Charger les prestations globales depuis la base de données
       setIsLoadingCatalogServices(true);
       api.getServices()
         .then((catServices) => {
           setAvailableCatalogServices(catServices);
-          // Start with empty prestations for the new salon so owner adds them one by one
-          setSelectedServicesMap({});
-          if (catServices.length > 0) {
-            setSelectedCatalogServiceId(catServices[0].id);
-            setNewServiceForm({
-              nom: catServices[0].nom || catServices[0].name,
-              univers: catServices[0].univers || catServices[0].universe || 'Dame',
-              description: catServices[0].description || '',
-              cout: catServices[0].price || 5000,
-              duree: catServices[0].duration || 30
-            });
-          }
         })
         .catch((err) => {
           console.error('Erreur chargement catalogue prestations:', err);
@@ -164,8 +193,49 @@ export const SalonRegistrationModal: React.FC<SalonRegistrationModalProps> = ({
         .finally(() => {
           setIsLoadingCatalogServices(false);
         });
+    } else {
+      setStep(1);
+      setSuccessCreated(false);
+      setIsSubmitting(false);
+      setErrorMsg('');
     }
   }, [isOpen]);
+
+  // Synchronisation automatique de la prestation sélectionnée et filtrage selon l'univers choisi à l'étape 1
+  useEffect(() => {
+    if (compatibleCatalogServices.length > 0) {
+      const isCurrentValid = compatibleCatalogServices.some(s => s.id === selectedCatalogServiceId);
+      if (!isCurrentValid) {
+        const first = compatibleCatalogServices[0];
+        setSelectedCatalogServiceId(first.id);
+        const defaultUniv = formData.universeType === 'homme' ? 'Homme' : formData.universeType === 'enfant' ? 'Enfant' : 'Dame';
+        setNewServiceForm({
+          nom: first.nom || first.name,
+          univers: first.univers || first.universe || defaultUniv,
+          description: first.description || '',
+          cout: selectedServicesMap[first.id]?.cout || first.price || 5000,
+          duree: selectedServicesMap[first.id]?.duree || first.duration || 30
+        });
+      }
+    } else {
+      setSelectedCatalogServiceId('');
+    }
+
+    // Purger automatiquement les prestations cochées qui ne correspondent pas à l'univers actuel
+    setSelectedServicesMap(prev => {
+      let hasChanged = false;
+      const nextMap: Record<string, SelectedPrestationState> = {};
+      Object.entries(prev).forEach(([serviceId, state]) => {
+        const srv = availableCatalogServices.find(s => s.id === serviceId);
+        if (srv && isServiceCompatibleWithSalon(srv, formData.universeType)) {
+          nextMap[serviceId] = state;
+        } else {
+          hasChanged = true;
+        }
+      });
+      return hasChanged ? nextMap : prev;
+    });
+  }, [formData.universeType, compatibleCatalogServices, availableCatalogServices]);
 
   if (!isOpen) return null;
 
@@ -259,8 +329,8 @@ export const SalonRegistrationModal: React.FC<SalonRegistrationModalProps> = ({
       return;
     }
     setSelectedServicesMap(prev => {
-      const nextMap: Record<string, SelectedPrestationState> = {};
-      availableCatalogServices.forEach(s => {
+      const nextMap: Record<string, SelectedPrestationState> = { ...prev };
+      compatibleCatalogServices.forEach(s => {
         nextMap[s.id] = {
           selected: true,
           cout: prev[s.id]?.cout || s.price || 5000,
@@ -305,9 +375,10 @@ export const SalonRegistrationModal: React.FC<SalonRegistrationModalProps> = ({
       setIsCreatingCustomService(false);
       setPrestationFeedback(`✓ Prestation "${created.nom || created.name}" enregistrée et ajoutée au salon !`);
       setTimeout(() => setPrestationFeedback(''), 3000);
+      const defaultUniv = formData.universeType === 'homme' ? 'Homme' : formData.universeType === 'enfant' ? 'Enfant' : 'Dame';
       setNewServiceForm({
         nom: '',
-        univers: 'Dame',
+        univers: defaultUniv,
         description: '',
         cout: 5000,
         duree: 30
@@ -325,7 +396,7 @@ export const SalonRegistrationModal: React.FC<SalonRegistrationModalProps> = ({
       return;
     }
 
-    const targetId = selectedCatalogServiceId || availableCatalogServices[0]?.id;
+    const targetId = selectedCatalogServiceId || compatibleCatalogServices[0]?.id;
     if (!targetId) return;
 
     setSelectedServicesMap(prev => ({
@@ -337,7 +408,7 @@ export const SalonRegistrationModal: React.FC<SalonRegistrationModalProps> = ({
       }
     }));
 
-    const srv = availableCatalogServices.find(s => s.id === targetId);
+    const srv = compatibleCatalogServices.find(s => s.id === targetId) || availableCatalogServices.find(s => s.id === targetId);
     setPrestationFeedback(`✓ Prestation "${srv?.nom || srv?.name}" configurée (${newServiceForm.cout.toLocaleString()} ${formData.currency}, ${newServiceForm.duree} min) !`);
     setTimeout(() => setPrestationFeedback(''), 3000);
   };
@@ -368,19 +439,14 @@ export const SalonRegistrationModal: React.FC<SalonRegistrationModalProps> = ({
   const selectedCount = Object.values(selectedServicesMap).filter(v => v.selected).length;
 
   // Filter predefined services for step 4
-  const filteredServices = availableCatalogServices.filter((srv) => {
-    const sName = (srv.nom || srv.name || '').toLowerCase();
-    const sCat = (srv.subCategory || '').toLowerCase();
-    const sUniv = (srv.univers || srv.universe || '').toLowerCase();
-    const query = serviceSearchQuery.trim().toLowerCase();
-
-    const matchesQuery = query === '' || sName.includes(query) || sCat.includes(query);
-    const matchesUniverse = serviceUniverseFilter === 'all' || 
-      sUniv === serviceUniverseFilter.toLowerCase() || 
-      sUniv === 'mixte';
-
-    return matchesQuery && matchesUniverse;
-  });
+  const filteredServices = useMemo(() => {
+    return compatibleCatalogServices.filter((srv) => {
+      const sName = (srv.nom || srv.name || '').toLowerCase();
+      const sCat = (srv.subCategory || '').toLowerCase();
+      const query = serviceSearchQuery.trim().toLowerCase();
+      return query === '' || sName.includes(query) || sCat.includes(query);
+    });
+  }, [compatibleCatalogServices, serviceSearchQuery]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -450,6 +516,8 @@ export const SalonRegistrationModal: React.FC<SalonRegistrationModalProps> = ({
       setSuccessCreated(true);
       setTimeout(() => {
         setIsSubmitting(false);
+        setSuccessCreated(false);
+        setStep(1);
         if (onSuccess && created) onSuccess(created.id);
         onClose();
       }, 1400);
@@ -460,15 +528,33 @@ export const SalonRegistrationModal: React.FC<SalonRegistrationModalProps> = ({
     }
   };
 
+  const handleClose = () => {
+    setSuccessCreated(false);
+    setIsSubmitting(false);
+    setStep(1);
+    setErrorMsg('');
+    setFormData(initialFormData);
+    setSelectedServicesMap({});
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
-      <div className="theme-bg-card border theme-border rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-scaleIn my-auto relative flex flex-col max-h-[92vh]">
+    <div 
+      className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
+      onClick={handleClose}
+    >
+      <div 
+        className="theme-bg-card border theme-border rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden animate-scaleIn my-auto relative flex flex-col max-h-[92vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
         
         {/* Modal Header */}
         <div className="relative p-4 sm:p-5 border-b theme-border bg-gradient-to-r from-amber-500/10 via-transparent to-transparent flex-shrink-0">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="absolute top-4 right-4 w-8 h-8 rounded-full theme-bg-subtle theme-text-secondary hover:theme-text-primary flex items-center justify-center transition cursor-pointer"
           >
             <X className="w-4 h-4" />
@@ -873,14 +959,40 @@ export const SalonRegistrationModal: React.FC<SalonRegistrationModalProps> = ({
             {step === 4 && (
               <div className="space-y-4 animate-fadeIn">
                 
+                {/* Indicateur de l'Univers défini à l'Étape 1 */}
+                <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/25 flex items-center justify-between gap-2 shadow-sm">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center flex-shrink-0">
+                      <Sparkles className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[10px] theme-text-secondary font-semibold uppercase tracking-wider">
+                        Univers défini à l'étape 1
+                      </div>
+                      <div className="text-xs font-black theme-text-accent truncate">
+                        {getUniverseLabel(formData.universeType)}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setStep(1)}
+                    className="px-2.5 py-1 rounded-xl theme-bg-subtle hover:bg-amber-500/20 text-amber-400 text-[10px] font-bold border border-amber-500/20 transition flex items-center gap-1 cursor-pointer flex-shrink-0"
+                    title="Modifier l'univers à l'étape 1"
+                  >
+                    <span>Modifier</span>
+                    <ChevronRight className="w-3 h-3" />
+                  </button>
+                </div>
+
                 {/* Intro Card */}
-                <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-xs theme-text-primary space-y-1">
+                <div className="p-3 rounded-2xl theme-bg-subtle/60 border theme-border text-xs theme-text-primary space-y-1">
                   <div className="flex items-center gap-1.5 font-bold theme-text-accent">
                     <Scissors className="w-4 h-4" />
-                    <span>Renseignez les prestations proposées par votre salon</span>
+                    <span>Prestations compatibles proposées par votre salon</span>
                   </div>
                   <p className="text-[11px] theme-text-secondary leading-relaxed">
-                    Sélectionnez les prestations dans le catalogue ou créez-en de nouvelles, puis précisez le <strong>coût ({formData.currency})</strong> et la <strong>durée</strong> pratiqués chez vous.
+                    Les prestations ci-dessous sont automatiquement adaptées à votre univers (<strong>{getUniverseLabel(formData.universeType)}</strong>). Précisez le <strong>coût ({formData.currency})</strong> et la <strong>durée</strong> pratiqués chez vous.
                   </p>
                 </div>
 
@@ -896,7 +1008,7 @@ export const SalonRegistrationModal: React.FC<SalonRegistrationModalProps> = ({
                       onClick={() => handleSelectAllServices(true)}
                       className="text-[10px] font-bold theme-text-accent hover:underline cursor-pointer"
                     >
-                      ⚡ Tout importer du catalogue ({availableCatalogServices.length})
+                      ⚡ Tout importer ({compatibleCatalogServices.length})
                     </button>
                   </div>
 
@@ -911,23 +1023,31 @@ export const SalonRegistrationModal: React.FC<SalonRegistrationModalProps> = ({
                     {/* 1. Choix du service dans la table services */}
                     <div>
                       <label className="block text-[11px] font-bold theme-text-primary mb-1">
-                        Prestation (issu du catalogue des services) *
+                        Prestation (issu du catalogue {getUniverseLabel(formData.universeType)}) *
                       </label>
                       <select
-                        value={isCreatingCustomService ? '__custom__' : selectedCatalogServiceId || availableCatalogServices[0]?.id || ''}
+                        value={isCreatingCustomService ? '__custom__' : selectedCatalogServiceId || compatibleCatalogServices[0]?.id || ''}
                         onChange={(e) => {
                           const val = e.target.value;
                           if (val === '__custom__') {
                             setIsCreatingCustomService(true);
+                            const defaultUniv = formData.universeType === 'homme' ? 'Homme' : formData.universeType === 'enfant' ? 'Enfant' : 'Dame';
+                            setNewServiceForm({
+                              nom: '',
+                              univers: defaultUniv,
+                              description: '',
+                              cout: 5000,
+                              duree: 30
+                            });
                           } else {
                             setIsCreatingCustomService(false);
                             setSelectedCatalogServiceId(val);
-                            const found = availableCatalogServices.find(s => s.id === val);
+                            const found = compatibleCatalogServices.find(s => s.id === val);
                             if (found) {
                               setNewServiceForm(prev => ({
                                 ...prev,
                                 nom: found.nom || found.name,
-                                univers: found.univers || found.universe || 'Dame',
+                                univers: found.univers || found.universe || (formData.universeType === 'homme' ? 'Homme' : formData.universeType === 'enfant' ? 'Enfant' : 'Dame'),
                                 description: found.description || '',
                                 cout: selectedServicesMap[found.id]?.cout || found.price || 5000,
                                 duree: selectedServicesMap[found.id]?.duree || found.duration || 30
@@ -937,12 +1057,16 @@ export const SalonRegistrationModal: React.FC<SalonRegistrationModalProps> = ({
                         }}
                         className="w-full px-3 py-2 rounded-xl text-xs theme-bg-subtle border theme-border theme-text-primary focus:outline-none focus:ring-2 focus:ring-amber-500 font-semibold cursor-pointer"
                       >
-                        <optgroup label="✨ Prestations du Catalogue">
-                          {availableCatalogServices.map(srv => (
-                            <option key={srv.id} value={srv.id}>
-                              {srv.nom || srv.name} — {srv.univers || srv.universe || 'Mixte'} {selectedServicesMap[srv.id]?.selected ? '✓ (Déjà ajouté)' : ''}
-                            </option>
-                          ))}
+                        <optgroup label={`✨ Prestations adaptées (${getUniverseLabel(formData.universeType)})`}>
+                          {compatibleCatalogServices.length === 0 ? (
+                            <option value="" disabled>Aucune prestation prédéfinie pour cet univers</option>
+                          ) : (
+                            compatibleCatalogServices.map(srv => (
+                              <option key={srv.id} value={srv.id}>
+                                {srv.nom || srv.name} — {srv.univers || srv.universe || 'Mixte'} {selectedServicesMap[srv.id]?.selected ? '✓ (Déjà ajouté)' : ''}
+                              </option>
+                            ))
+                          )}
                         </optgroup>
                         <optgroup label="➕ Personnalisée">
                           <option value="__custom__">+ Saisir une nouvelle prestation sur-mesure...</option>
@@ -974,12 +1098,36 @@ export const SalonRegistrationModal: React.FC<SalonRegistrationModalProps> = ({
                             <select
                               value={newServiceForm.univers}
                               onChange={(e) => setNewServiceForm(prev => ({ ...prev, univers: e.target.value }))}
-                              className="w-full px-2.5 py-1.5 rounded-xl text-xs theme-bg-subtle border theme-border theme-text-primary focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer"
+                              className="w-full px-2.5 py-1.5 rounded-xl text-xs theme-bg-subtle border theme-border theme-text-primary focus:outline-none focus:ring-1 focus:ring-amber-500 cursor-pointer font-semibold"
                             >
-                              <option value="Dame">Dame (Femme)</option>
-                              <option value="Homme">Homme</option>
-                              <option value="Enfant">Enfant</option>
-                              <option value="Adolescent">Adolescent</option>
+                              {formData.universeType === 'femme' && (
+                                <>
+                                  <option value="Dame">Dame (Femme)</option>
+                                  <option value="Mixte">Mixte</option>
+                                </>
+                              )}
+                              {formData.universeType === 'homme' && (
+                                <>
+                                  <option value="Homme">Homme</option>
+                                  <option value="Mixte">Mixte</option>
+                                </>
+                              )}
+                              {formData.universeType === 'enfant' && (
+                                <>
+                                  <option value="Enfant">Enfant</option>
+                                  <option value="Adolescent">Adolescent</option>
+                                  <option value="Mixte">Mixte</option>
+                                </>
+                              )}
+                              {(!formData.universeType || formData.universeType === 'mixte') && (
+                                <>
+                                  <option value="Dame">Dame (Femme)</option>
+                                  <option value="Homme">Homme</option>
+                                  <option value="Enfant">Enfant</option>
+                                  <option value="Adolescent">Adolescent</option>
+                                  <option value="Mixte">Mixte</option>
+                                </>
+                              )}
                             </select>
                           </div>
 
@@ -1031,7 +1179,7 @@ export const SalonRegistrationModal: React.FC<SalonRegistrationModalProps> = ({
                           onChange={(e) => {
                             const val = parseFloat(e.target.value) || 0;
                             setNewServiceForm(prev => ({ ...prev, cout: val }));
-                            const activeId = selectedCatalogServiceId || availableCatalogServices[0]?.id;
+                            const activeId = selectedCatalogServiceId || compatibleCatalogServices[0]?.id;
                             if (activeId && !isCreatingCustomService && selectedServicesMap[activeId]?.selected) {
                               updateServiceCout(activeId, val);
                             }
@@ -1054,7 +1202,7 @@ export const SalonRegistrationModal: React.FC<SalonRegistrationModalProps> = ({
                           onChange={(e) => {
                             const val = parseInt(e.target.value, 10) || 30;
                             setNewServiceForm(prev => ({ ...prev, duree: val }));
-                            const activeId = selectedCatalogServiceId || availableCatalogServices[0]?.id;
+                            const activeId = selectedCatalogServiceId || compatibleCatalogServices[0]?.id;
                             if (activeId && !isCreatingCustomService && selectedServicesMap[activeId]?.selected) {
                               updateServiceDuree(activeId, val);
                             }
@@ -1073,7 +1221,7 @@ export const SalonRegistrationModal: React.FC<SalonRegistrationModalProps> = ({
                           type="button"
                           onClick={() => {
                             setNewServiceForm(prev => ({ ...prev, duree: m }));
-                            const activeId = selectedCatalogServiceId || availableCatalogServices[0]?.id;
+                            const activeId = selectedCatalogServiceId || compatibleCatalogServices[0]?.id;
                             if (activeId && !isCreatingCustomService && selectedServicesMap[activeId]?.selected) {
                               updateServiceDuree(activeId, m);
                             }

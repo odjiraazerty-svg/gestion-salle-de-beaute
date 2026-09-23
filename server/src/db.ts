@@ -18,6 +18,9 @@ export const pool = new Pool(
         ssl: {
           rejectUnauthorized: false,
         },
+        max: 20,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 10000,
       }
     : {
         host: process.env.DB_HOST || '127.0.0.1',

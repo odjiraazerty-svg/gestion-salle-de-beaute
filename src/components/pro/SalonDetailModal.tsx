@@ -57,7 +57,7 @@ export const SalonDetailModal: React.FC<SalonDetailModalProps> = ({
 
   if (!isOpen || !salon) return null;
 
-  const isActive = currentSalon.id === salon.id;
+  const isActive = currentSalon?.id === salon.id;
   const salonStaff = staff.filter(st => st.salonId === salon.id || !st.salonId);
 
   return (

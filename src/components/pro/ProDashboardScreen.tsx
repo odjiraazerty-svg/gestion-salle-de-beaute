@@ -110,6 +110,7 @@ export const ProDashboardScreen: React.FC<Props> = ({
       if (currentUser?.role === 'admin') return true;
       if (currentUser?.role === 'owner') {
         return (s.ownerId && currentUser?.id && s.ownerId === currentUser.id) ||
+               (s.id_user && currentUser?.id && s.id_user === currentUser.id) ||
                (currentUser?.salonId && s.id === currentUser.salonId);
       }
       if (currentUser?.role === 'employee') {
@@ -249,80 +250,28 @@ export const ProDashboardScreen: React.FC<Props> = ({
           </h2>
         </div>
 
-        {/* Salon Actions Dropdown Button */}
-        <div className="relative">
+        {/* Salon Actions Header Buttons */}
+        <div className="flex items-center gap-1.5">
           <button
             type="button"
-            onClick={() => setIsSalonMenuOpen(!isSalonMenuOpen)}
-            className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 text-xs font-black shadow-md shadow-amber-500/20 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
-            title="Options de gestion des salons"
+            onClick={() => setIsRegisterSalonOpen(true)}
+            className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 text-xs font-black shadow-md shadow-amber-500/20 active:scale-95 transition-all flex items-center gap-1.5 cursor-pointer"
+            title="Enregistrer un nouveau salon"
           >
             <Plus className="w-3.5 h-3.5 stroke-[3]" />
             <span>Ajouter Salon</span>
-            <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isSalonMenuOpen ? 'rotate-180' : ''}`} />
           </button>
 
-          {isSalonMenuOpen && (
-            <>
-              <div 
-                className="fixed inset-0 z-30" 
-                onClick={() => setIsSalonMenuOpen(false)} 
-              />
-              <div className="absolute right-0 mt-2 w-60 rounded-2xl theme-bg-card border theme-border shadow-2xl p-1.5 z-40 animate-scaleIn">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsSalonMenuOpen(false);
-                    setIsRegisterSalonOpen(true);
-                  }}
-                  className="w-full text-left p-2.5 rounded-xl theme-bg-subtle hover:theme-badge-accent transition flex items-center gap-2.5 text-xs font-bold theme-text-primary cursor-pointer"
-                >
-                  <div className="w-7 h-7 rounded-lg bg-amber-500/20 text-amber-500 flex items-center justify-center flex-shrink-0">
-                    <Plus className="w-4 h-4 stroke-[2.5]" />
-                  </div>
-                  <div>
-                    <div className="leading-tight">Ajouter un Salon</div>
-                    <div className="text-[10px] font-normal theme-text-muted mt-0.5">Enregistrer un nouvel établissement</div>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsSalonMenuOpen(false);
-                    handleSelectTab('salons');
-                  }}
-                  className="w-full text-left p-2.5 rounded-xl hover:theme-bg-subtle transition flex items-center gap-2.5 text-xs font-semibold theme-text-secondary hover:theme-text-primary cursor-pointer mt-1"
-                >
-                  <div className="w-7 h-7 rounded-lg theme-bg-subtle flex items-center justify-center flex-shrink-0">
-                    <Store className="w-4 h-4 text-amber-400" />
-                  </div>
-                  <div>
-                    <div className="leading-tight">Voir Mes Salons ({mySalons.length})</div>
-                    <div className="text-[10px] font-normal theme-text-muted mt-0.5">Consulter & éditer les fiches</div>
-                  </div>
-                </button>
-
-                {mySalons.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setIsSalonMenuOpen(false);
-                      setIsSalonSwitcherOpen(true);
-                    }}
-                    className="w-full text-left p-2.5 rounded-xl hover:theme-bg-subtle transition flex items-center gap-2.5 text-xs font-semibold theme-text-secondary hover:theme-text-primary cursor-pointer mt-1"
-                  >
-                    <div className="w-7 h-7 rounded-lg theme-bg-subtle flex items-center justify-center flex-shrink-0">
-                      <SlidersHorizontal className="w-4 h-4 text-amber-400" />
-                    </div>
-                    <div>
-                      <div className="leading-tight">Changer d'établissement actif</div>
-                      <div className="text-[10px] font-normal theme-text-muted mt-0.5">Basculer entre vos salons</div>
-                    </div>
-                  </button>
-                )}
-              </div>
-            </>
+          {mySalons.length > 1 && (
+            <button
+              type="button"
+              onClick={() => setIsSalonSwitcherOpen(true)}
+              className="p-2 rounded-xl theme-bg-card border theme-border hover:theme-bg-subtle text-amber-400 transition cursor-pointer flex items-center gap-1"
+              title="Changer d'établissement actif"
+            >
+              <Store className="w-3.5 h-3.5" />
+              <span className="text-[10px] font-bold theme-text-primary hidden sm:inline">Changer ({mySalons.length})</span>
+            </button>
           )}
         </div>
       </div>
@@ -835,16 +784,36 @@ export const ProDashboardScreen: React.FC<Props> = ({
 
                               {/* 2. Jours & Horaires d'ouverture */}
                               <td className="py-3.5 px-4">
-                                <div className="space-y-1">
-                                  <div className="flex items-center gap-1.5 text-xs font-semibold theme-text-primary">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
-                                    <span>{s.openingHours?.days || 'Lun - Sam'}</span>
-                                  </div>
-                                  <div className="flex items-center gap-1.5 text-[11px] theme-text-secondary">
-                                    <Clock className="w-3 h-3 theme-text-accent flex-shrink-0" />
-                                    <span>{s.openingHours?.hours || '08:30 - 20:00'}</span>
-                                  </div>
-                                </div>
+                                {(() => {
+                                  let ohDays = 'Lun - Sam';
+                                  let ohHours = '08:30 - 20:00';
+                                  if (s.openingHours) {
+                                    if (typeof s.openingHours === 'object') {
+                                      ohDays = s.openingHours.days || ohDays;
+                                      ohHours = s.openingHours.hours || ohHours;
+                                    } else if (typeof s.openingHours === 'string') {
+                                      try {
+                                        const p = JSON.parse(s.openingHours);
+                                        ohDays = p.days || ohDays;
+                                        ohHours = p.hours || ohHours;
+                                      } catch {
+                                        ohHours = s.openingHours;
+                                      }
+                                    }
+                                  }
+                                  return (
+                                    <div className="space-y-1">
+                                      <div className="flex items-center gap-1.5 text-xs font-semibold theme-text-primary">
+                                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                                        <span>{ohDays}</span>
+                                      </div>
+                                      <div className="flex items-center gap-1.5 text-[11px] theme-text-secondary">
+                                        <Clock className="w-3 h-3 theme-text-accent flex-shrink-0" />
+                                        <span>{ohHours}</span>
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
                               </td>
 
                               {/* 3. Actions */}
@@ -1486,7 +1455,7 @@ export const ProDashboardScreen: React.FC<Props> = ({
               <div className="min-w-0 flex-1">
                 <h4 className="text-xs font-bold theme-text-primary truncate">{serviceToDelete.nom || serviceToDelete.name}</h4>
                 <p className="text-[11px] text-purple-400 font-semibold truncate mt-0.5">
-                  {serviceToDelete.cout || serviceToDelete.price} {salonInfo.currency} • {serviceToDelete.duree || serviceToDelete.duration} min
+                  {serviceToDelete.cout || serviceToDelete.price} {salonInfo?.currency || 'FCFA'} • {serviceToDelete.duree || serviceToDelete.duration} min
                 </p>
               </div>
             </div>
@@ -1626,10 +1595,12 @@ export const ProDashboardScreen: React.FC<Props> = ({
       )}
 
       {/* Salon Registration Modal */}
-      <SalonRegistrationModal
-        isOpen={isRegisterSalonOpen}
-        onClose={() => setIsRegisterSalonOpen(false)}
-      />
+      {isRegisterSalonOpen && (
+        <SalonRegistrationModal
+          isOpen={isRegisterSalonOpen}
+          onClose={() => setIsRegisterSalonOpen(false)}
+        />
+      )}
 
       {/* Multi-Salons Switcher Modal */}
       {isSalonSwitcherOpen && (
@@ -1659,7 +1630,7 @@ export const ProDashboardScreen: React.FC<Props> = ({
                 </div>
               ) : (
                 mySalons.map((s) => {
-                  const isSelected = s.id === currentSalon.id;
+                  const isSelected = s.id === currentSalon?.id;
                   return (
                     <button
                       key={s.id}

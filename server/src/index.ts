@@ -1902,6 +1902,6 @@ app.post('/api/admin/clear-providers', async (_req: Request, res: Response) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Serveur API PostgreSQL démarré sur http://localhost:${PORT}`);
+app.listen(Number(PORT), '0.0.0.0', () => {
+  console.log(`🚀 Serveur API PostgreSQL démarré sur http://0.0.0.0:${PORT}`);
 });
