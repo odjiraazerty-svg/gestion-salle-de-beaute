@@ -45,6 +45,8 @@ jobs:
           VITE_API_URL: ${{ secrets.VITE_API_URL || 'https://saas-beaute-api.onrender.com/api' }}
 
       - name: Sync Capacitor Android
+        env:
+          CAPACITOR_TELEMETRY: "false"
         run: npx cap sync android
 
       - name: Build Android Debug APK
